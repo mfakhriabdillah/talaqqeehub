@@ -1,22 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BookOpen, 
   Calendar, 
   LogOut, 
   Bell, 
-  GraduationCap
+  GraduationCap,
+  Menu,
+  X
 } from 'lucide-react';
 
 export default function StudentLayout({ user, currentView, setView, onLogout, children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const menuItems = [
     { id: 'dashboard', label: 'My Dashboard', icon: BookOpen },
     { id: 'book-session', label: 'Book Session', icon: Calendar },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row relative">
+      {/* Mobile Sidebar backdrop dimmer */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-45 md:hidden transition-opacity duration-300"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
+
       {/* Student Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:flex transition-transform duration-300 ease-in-out`}>
         {/* Brand */}
         <div className="p-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -28,6 +39,14 @@ export default function StudentLayout({ user, currentView, setView, onLogout, ch
               </span>
             </div>
           </div>
+          {/* Close sidebar button on mobile */}
+          <button 
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Student User Card */}
@@ -91,13 +110,22 @@ export default function StudentLayout({ user, currentView, setView, onLogout, ch
       </aside>
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Top Header */}
-        <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <header className="bg-white border-b border-slate-100 px-4 md:px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+          {/* Menu Trigger Hamburger button on Mobile */}
+          <button 
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden p-2 hover:bg-slate-50 text-slate-600 rounded-lg transition-all border border-slate-100 cursor-pointer mr-3"
+          >
+            <Menu size={20} />
+          </button>
+
           {/* Section Indicator */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-sm font-medium">Pages</span>
-            <span className="text-slate-300">/</span>
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-slate-400 text-sm font-medium hidden sm:inline">Pages</span>
+            <span className="text-slate-300 hidden sm:inline">/</span>
             <span className="text-slate-800 text-sm font-bold capitalize">
               {currentView === 'dashboard' ? 'Student Dashboard' : currentView.replace('-', ' ')}
             </span>
@@ -127,7 +155,7 @@ export default function StudentLayout({ user, currentView, setView, onLogout, ch
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
+        <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
           {children}
         </main>
       </div>

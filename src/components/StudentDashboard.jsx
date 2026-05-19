@@ -93,7 +93,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
       {isDashboardView && (
         <div className="space-y-8">
           {/* Stats Widgets */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:translate-y-[-2px] hover:shadow-md">
               <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
                 <BookOpen size={24} />
