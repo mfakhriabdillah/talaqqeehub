@@ -88,6 +88,126 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
   const [selectedCompletedSession, setSelectedCompletedSession] = useState(null);
   const [modalSelectedWord, setModalSelectedWord] = useState(null);
 
+  // Completed History & Modal API Integration States
+  const [realCompletedSessions, setRealCompletedSessions] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [modalQuranWords, setModalQuranWords] = useState([]);
+  const [modalLoadingWords, setModalLoadingWords] = useState(false);
+
+  // 1. Fetch completed session history joined with teacher profile and session_notes
+  const fetchCompletedHistory = async () => {
+    if (!user) return;
+    try {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id, 
+          schedule_time, 
+          surah_number, 
+          start_ayah, 
+          end_ayah, 
+          status, 
+          notes,
+          teacher:users!bookings_teacher_id_fkey(full_name), 
+          session_notes(feedback, mistake_words)
+        `)
+        .eq('student_id', user.id)
+        .eq('status', 'completed')
+        .order('schedule_time', { ascending: false });
+
+      if (error) throw error;
+      setRealCompletedSessions(data || []);
+    } catch (err) {
+      console.error("Failed to load completed sessions history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCompletedHistory();
+  }, [user, sessions]);
+
+  // 2. Dynamic Quran API Fetch when Modal triggers
+  useEffect(() => {
+    let active = true;
+    const fetchModalQuranText = async () => {
+      if (!selectedCompletedSession || !selectedCompletedSession.surah_number) {
+        setModalQuranWords([]);
+        return;
+      }
+
+      // Handle mock fallback
+      if (selectedCompletedSession.id === 'mock-booking-id' || typeof selectedCompletedSession.surah_number !== 'number') {
+        const mockWords = MOCK_QURAN_TEXT.words.map((w, idx) => ({
+          id: `1-${idx}`,
+          text: w.text,
+          ayah: w.ayah,
+          transliteration: w.transliteration,
+          translation: w.translation
+        }));
+        setModalQuranWords(mockWords);
+        return;
+      }
+
+      try {
+        setModalLoadingWords(true);
+        const surahNum = selectedCompletedSession.surah_number;
+        const startA = selectedCompletedSession.start_ayah || 1;
+        const endA = selectedCompletedSession.end_ayah || 7;
+
+        const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/quran-uthmani`);
+        if (!response.ok) throw new Error("Failed to fetch Quranic verses");
+        const json = await response.json();
+
+        if (json.code === 200 && json.data?.ayahs) {
+          const ayahs = json.data.ayahs;
+          const filtered = ayahs.filter(a => a.numberInSurah >= startA && a.numberInSurah <= endA);
+
+          const surahName = ALL_SURAHS[surahNum - 1] || `Surah #${surahNum}`;
+
+          const tokenizedWords = [];
+          filtered.forEach(ayah => {
+            let cleanedText = ayah.text;
+            if (surahNum !== 1 && surahNum !== 9 && cleanedText.startsWith("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ")) {
+              cleanedText = cleanedText.replace("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", "").trim();
+            }
+
+            const words = cleanedText.split(/\s+/);
+            words.forEach((wordStr, wordIdx) => {
+              if (wordStr.trim() !== '') {
+                tokenizedWords.push({
+                  id: `${ayah.numberInSurah}-${wordIdx}`,
+                  text: wordStr,
+                  ayah: ayah.numberInSurah,
+                  wordIndex: wordIdx,
+                  transliteration: `Ayah ${ayah.numberInSurah}, Word ${wordIdx + 1}`,
+                  translation: `Recitation element from Surah ${surahName}`
+                });
+              }
+            });
+          });
+
+          if (active) {
+            setModalQuranWords(tokenizedWords);
+          }
+        }
+      } catch (err) {
+        console.error("Modal Quran fetch failed:", err);
+      } finally {
+        if (active) {
+          setModalLoadingWords(false);
+        }
+      }
+    };
+
+    fetchModalQuranText();
+    return () => {
+      active = false;
+    };
+  }, [selectedCompletedSession]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) {
@@ -247,7 +367,12 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                     return (
                       <div 
                         key={sess.id}
-                        onClick={() => isCompleted && setSelectedCompletedSession(sess)}
+                        onClick={() => {
+                          if (isCompleted) {
+                            const realDetail = realCompletedSessions.find(r => r.id === sess.id);
+                            setSelectedCompletedSession(realDetail || sess);
+                          }
+                        }}
                         className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                           isCompleted 
                             ? 'bg-emerald-50/10 border-slate-100 hover:bg-white hover:shadow-lg hover:border-emerald-400 hover:ring-4 hover:ring-emerald-500/5 cursor-pointer group' 
@@ -491,159 +616,199 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
       )}
 
       {/* 3. INTERACTIVE RECITATION REVIEW MODAL */}
-      {selectedCompletedSession && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-100 shadow-2xl p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto relative animate-scaleUp">
-            {/* Close Button */}
-            <button 
-              onClick={() => {
-                setSelectedCompletedSession(null);
-                setModalSelectedWord(null);
-              }}
-              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"
-            >
-              <X size={20} />
-            </button>
+      {selectedCompletedSession && (() => {
+        // Parse date and time from schedule_time or fallback
+        let modalDate = selectedCompletedSession.date || '';
+        let modalTime = selectedCompletedSession.time || '';
+        if (selectedCompletedSession.schedule_time) {
+          const dObj = new Date(selectedCompletedSession.schedule_time);
+          modalDate = dObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          modalTime = dObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
 
-            {/* Modal Header */}
-            <div>
-              <span className="text-[10px] text-blue-600 font-extrabold uppercase tracking-wider bg-blue-50 px-3 py-1 rounded-full border border-blue-100/50 inline-block">
-                Recitation Assessment Report
-              </span>
-              <h2 className="text-xl font-black text-slate-800 m-0 leading-snug mt-2">
-                Audit Feedback: Surah {selectedCompletedSession.surah}
-              </h2>
-              <p className="text-xs text-slate-400 font-semibold mt-1">
-                Conducted with <span className="text-slate-600 font-bold">{selectedCompletedSession.ustadzName}</span> on {selectedCompletedSession.date} at {selectedCompletedSession.time}.
-              </p>
-            </div>
+        // Parse Teacher profile name
+        const teacherName = selectedCompletedSession.teacher?.full_name || selectedCompletedSession.ustadzName || 'Ustadz Abdul Somad';
 
-            {/* Error Counter Badges */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-amber-50 border border-amber-100 px-4 py-3 rounded-2xl flex items-center gap-3">
-                <div className="p-2.5 bg-amber-500 rounded-xl text-white">
-                  <AlertTriangle size={18} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Minor Slips</span>
-                  <span className="text-lg font-bold text-amber-700 leading-none mt-1 inline-block">
-                    {selectedCompletedSession.evaluation?.minorErrors}
-                  </span>
-                </div>
-              </div>
+        // Parse Surah target name
+        const targetSurah = selectedCompletedSession.surah_number
+          ? (ALL_SURAHS[selectedCompletedSession.surah_number - 1] || `Surah #${selectedCompletedSession.surah_number}`)
+          : (selectedCompletedSession.surah || 'Al-Fatihah');
 
-              <div className="bg-rose-50 border border-rose-100 px-4 py-3 rounded-2xl flex items-center gap-3">
-                <div className="p-2.5 bg-rose-500 rounded-xl text-white">
-                  <XCircle size={18} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Major Mistakes</span>
-                  <span className="text-lg font-bold text-rose-700 leading-none mt-1 inline-block">
-                    {selectedCompletedSession.evaluation?.majorErrors}
-                  </span>
-                </div>
-              </div>
-            </div>
+        // Verse range bounds
+        const targetRange = selectedCompletedSession.surah_number
+          ? `${selectedCompletedSession.start_ayah || 1} - ${selectedCompletedSession.end_ayah || 7}`
+          : (selectedCompletedSession.ayahRange || '1-7');
 
-            {/* Quran Word Map Board */}
-            <div className="bg-emerald-50/20 border border-emerald-100/40 rounded-3xl shadow-sm p-6 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px]">
-              <div className="flex justify-center mb-6">
-                <div className="border border-emerald-600/10 rounded-full px-5 py-1 bg-emerald-50 text-emerald-800 font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                  <Bookmark size={10} className="fill-emerald-800" />
-                  <span>Interactive Mushaf Word Board</span>
-                </div>
-              </div>
+        // Joined mistake coordinate arrays
+        const mistakeWordsCoordinates = selectedCompletedSession.session_notes?.[0]?.mistake_words || [];
 
-              {/* Arabic word container */}
-              <div className="quran-text text-right text-2xl md:text-3xl leading-[2] md:leading-[2.3] flex flex-wrap justify-center gap-x-4 gap-y-6 select-none p-4 max-w-xl mx-auto border border-emerald-800/10 rounded-2xl bg-white shadow-inner">
-                {MOCK_QURAN_TEXT.words.map((word) => {
-                  const state = selectedCompletedSession.evaluation?.wordStates?.[word.id];
-                  let bgStyle = "hover:bg-slate-50 text-slate-800 border-slate-200/10 hover:border-slate-200";
-                  if (state === 'minor') {
-                    bgStyle = "bg-amber-100 border-amber-300 text-amber-900 font-bold shadow-sm shadow-amber-500/10";
-                  } else if (state === 'major') {
-                    bgStyle = "bg-rose-100 border-rose-300 text-rose-950 font-bold shadow-sm shadow-rose-500/10";
-                  }
+        // Dynamic advice comments
+        const teacherAdvice = selectedCompletedSession.session_notes?.[0]?.feedback || selectedCompletedSession.evaluation?.feedback || "Alhamdulillah, recitation session completed successfully.";
 
-                  return (
-                    <span 
-                      key={word.id}
-                      onClick={() => setModalSelectedWord(word)}
-                      className={`px-2.5 py-1 border rounded-lg cursor-pointer transition-all inline-block text-center hover:scale-[1.05] active:scale-[0.95] ${bgStyle}`}
-                    >
-                      {word.text}
-                      {/* Tiny Ayah indicators */}
-                      {word.id === "w4" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">١</span>}
-                      {word.id === "w8" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٢</span>}
-                      {word.id === "w10" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٣</span>}
-                      {word.id === "w13" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٤</span>}
-                      {word.id === "w17" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٥</span>}
-                      {word.id === "w20" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٦</span>}
-                      {word.id === "w29" && <span className="text-[12px] text-emerald-600 font-sans border border-emerald-600/30 rounded-full px-1 mx-1 font-bold">٧</span>}
-                    </span>
-                  );
-                })}
-              </div>
+        // Group modal words by Ayah number
+        const modalAyahsMap = {};
+        modalQuranWords.forEach(word => {
+          if (!modalAyahsMap[word.ayah]) {
+            modalAyahsMap[word.ayah] = [];
+          }
+          modalAyahsMap[word.ayah].push(word);
+        });
 
-              <p className="text-center text-[10px] text-slate-400 font-semibold mt-4">
-                💡 Tip: Click on any word in the Quran board above to inspect translation and pronunciation guide.
-              </p>
-            </div>
-
-            {/* Word details inspector inside modal */}
-            {modalSelectedWord && (
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2 animate-fadeIn relative">
-                <button 
-                  onClick={() => setModalSelectedWord(null)}
-                  className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
-                >
-                  <X size={14} />
-                </button>
-                <div className="flex items-center gap-3">
-                  <span className="quran-text text-2xl font-bold text-emerald-800 leading-none">{modalSelectedWord.text}</span>
-                  <div>
-                    <h5 className="text-xs font-bold text-slate-800 m-0">{modalSelectedWord.transliteration}</h5>
-                    <span className="text-[10px] text-slate-400 font-semibold">Ayah {modalSelectedWord.ayah}</span>
-                  </div>
-                </div>
-                <div className="pt-1.5 border-t border-slate-200/50">
-                  <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block">Translation</span>
-                  <p className="text-xs text-slate-600 m-0 font-medium">"{modalSelectedWord.translation}"</p>
-                </div>
-              </div>
-            )}
-
-            {/* Teacher's final text advice comments */}
-            <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 md:p-6 space-y-3">
-              <h3 className="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
-                <MessageSquare size={16} className="text-emerald-600" />
-                Ustadz's Advice & Recitation Guidance
-              </h3>
-              <div className="flex flex-col gap-2 bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm">
-                <span className="w-max text-[8px] uppercase tracking-widest font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded">
-                  Teacher Portal Note
-                </span>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed italic m-0">
-                  "{selectedCompletedSession.evaluation?.feedback}"
-                </p>
-              </div>
-            </div>
-
-            {/* Footer close CTA */}
-            <div className="flex justify-end pt-2">
-              <button
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-100 shadow-2xl p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto relative animate-scaleUp">
+              {/* Close Button */}
+              <button 
                 onClick={() => {
                   setSelectedCompletedSession(null);
                   setModalSelectedWord(null);
                 }}
-                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"
               >
-                Close Report
+                <X size={20} />
               </button>
+
+              {/* Modal Header */}
+              <div>
+                <span className="text-[10px] text-blue-600 font-extrabold uppercase tracking-wider bg-blue-50 px-3 py-1 rounded-full border border-blue-100/50 inline-block">
+                  Recitation Assessment Report
+                </span>
+                <h2 className="text-xl font-black text-slate-800 m-0 leading-snug mt-2">
+                  Audit Feedback: Surah {targetSurah}
+                </h2>
+                <p className="text-xs text-slate-400 font-semibold mt-1">
+                  Conducted with <span className="text-slate-600 font-bold">{teacherName}</span> on {modalDate} at {modalTime}.
+                </p>
+                <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-100/50 px-2.5 py-0.5 rounded-lg w-max mt-2">
+                  Target Range: Ayahs {targetRange}
+                </div>
+              </div>
+
+              {/* Error Counter Badges */}
+              <div className="grid grid-cols-1 gap-4">
+                <div className="bg-rose-50 border border-rose-100 px-4 py-3 rounded-2xl flex items-center gap-3">
+                  <div className="p-2.5 bg-rose-500 rounded-xl text-white">
+                    <XCircle size={18} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Flagged Errors</span>
+                    <span className="text-lg font-bold text-rose-700 leading-none mt-1 inline-block">
+                      {mistakeWordsCoordinates.length || selectedCompletedSession.evaluation?.minorErrors || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quran Word Map Board */}
+              <div className="bg-emerald-50/20 border border-emerald-100/40 rounded-3xl shadow-sm p-6 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px]">
+                <div className="flex justify-center mb-6">
+                  <div className="border border-emerald-600/10 rounded-full px-5 py-1 bg-emerald-50 text-emerald-800 font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                    <Bookmark size={10} className="fill-emerald-800" />
+                    <span>Interactive Mushaf Word Board</span>
+                  </div>
+                </div>
+
+                {modalLoadingWords ? (
+                  <div className="flex flex-col items-center justify-center p-8 space-y-2">
+                    <div className="w-8 h-8 border-2 border-emerald-500/20 border-t-emerald-600 rounded-full animate-spin"></div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Loading Quran text...</span>
+                  </div>
+                ) : (
+                  /* Arabic word container */
+                  <div 
+                    className="quran-text text-right text-2xl md:text-3xl leading-[2] md:leading-[2.3] flex flex-col gap-6 select-none p-4 max-w-xl mx-auto border border-emerald-800/10 rounded-2xl bg-white shadow-inner"
+                    style={{ direction: 'rtl' }}
+                  >
+                    {Object.keys(modalAyahsMap).sort((a, b) => Number(a) - Number(b)).map((ayahNum) => (
+                      <div 
+                        key={ayahNum}
+                        className="flex flex-wrap gap-x-4 gap-y-3 justify-start pb-3 border-b border-emerald-800/5 last:border-0 last:pb-0"
+                      >
+                        {modalAyahsMap[ayahNum].map((word) => {
+                          const isMistake = mistakeWordsCoordinates.includes(word.id);
+                          const bgStyle = isMistake
+                            ? "bg-red-200 text-red-900 rounded-md border-red-300 font-bold shadow-sm shadow-red-500/10 transition-colors"
+                            : "hover:bg-slate-50 text-slate-800 border-slate-200/10 hover:border-slate-200";
+
+                          return (
+                            <span 
+                              key={word.id}
+                              onClick={() => setModalSelectedWord(word)}
+                              className={`px-2.5 py-1 border rounded-lg cursor-pointer transition-all inline-block text-center hover:scale-[1.05] active:scale-[0.95] ${bgStyle}`}
+                            >
+                              {word.text}
+                            </span>
+                          );
+                        })}
+                        {/* Premium Ayah End Ornament Indicator */}
+                        <span className="text-emerald-700/50 font-serif font-extrabold text-xl self-center px-1.5 select-none">
+                          ﴿{ayahNum}﴾
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-center text-[10px] text-slate-400 font-semibold mt-4">
+                  💡 Tip: Click on any word in the Quran board above to inspect translation and pronunciation guide.
+                </p>
+              </div>
+
+              {/* Word details inspector inside modal */}
+              {modalSelectedWord && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2 animate-fadeIn relative">
+                  <button 
+                    onClick={() => setModalSelectedWord(null)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={14} />
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="quran-text text-2xl font-bold text-emerald-800 leading-none">{modalSelectedWord.text}</span>
+                    <div>
+                      <h5 className="text-xs font-bold text-slate-800 m-0">{modalSelectedWord.transliteration}</h5>
+                      <span className="text-[10px] text-slate-400 font-semibold">Ayah {modalSelectedWord.ayah}</span>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-slate-200/50">
+                    <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block">Translation</span>
+                    <p className="text-xs text-slate-600 m-0 font-medium">"{modalSelectedWord.translation}"</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Teacher's final text advice comments */}
+              <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 md:p-6 space-y-3">
+                <h3 className="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
+                  <MessageSquare size={16} className="text-emerald-600" />
+                  Ustadz's Advice & Recitation Guidance
+                </h3>
+                <div className="flex flex-col gap-2 bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm">
+                  <span className="w-max text-[8px] uppercase tracking-widest font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded">
+                    Teacher Portal Note
+                  </span>
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed italic m-0">
+                    "{teacherAdvice}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer close CTA */}
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => {
+                    setSelectedCompletedSession(null);
+                    setModalSelectedWord(null);
+                  }}
+                  className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  Close Report
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

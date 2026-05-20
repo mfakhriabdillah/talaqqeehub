@@ -200,6 +200,7 @@ export default function App() {
   };
 
   const handleSubmitEvaluation = (sessionId, evaluationData) => {
+    loadBookings();
     setSessions(prev => 
       prev.map(sess => 
         sess.id === sessionId 

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { MOCK_QURAN_TEXT } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { MOCK_QURAN_TEXT, ALL_SURAHS } from '../data/mockData';
 import { 
   BookOpen, 
   ChevronRight, 
@@ -13,57 +14,230 @@ import {
 } from 'lucide-react';
 
 export default function MushafEvaluation({ activeSession, onSubmitEvaluation, onCancel }) {
-  // If no session is active (direct click on page), mock a default one
-  const session = activeSession || {
-    id: "sess-1",
-    studentName: "Ahmad Fauzi",
-    studentAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-    surah: "Al-Fatihah",
-    ayahRange: "1-7"
-  };
-
-  // State to track word errors
-  // e.g., { "w3": "minor", "w10": "major" }
-  const [wordStates, setWordStates] = useState({});
-  const [selectedWord, setSelectedWord] = useState(null); // Active word for modal
+  const [loading, setLoading] = useState(true);
+  const [quranWords, setQuranWords] = useState([]);
+  const [bookingData, setBookingData] = useState(null);
+  
+  // Track flagged mistake indexes strictly
+  const [mistakeIndexes, setMistakeIndexes] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleWordClick = (word) => {
-    setSelectedWord(word);
-  };
-
-  const setWordStatus = (wordId, status) => {
-    setWordStates(prev => {
-      const next = { ...prev };
-      if (status === 'none') {
-        delete next[wordId];
-      } else {
-        next[wordId] = status;
+  // 1. Fetch booking context and Arabic text on mount
+  useEffect(() => {
+    let mounted = true;
+    const loadSessionData = async () => {
+      if (!activeSession?.id) {
+        // Fallback for mock preview session
+        setBookingData({
+          id: 'mock-booking-id',
+          studentName: activeSession?.studentName || "Ahmad Fauzi",
+          studentAvatar: activeSession?.studentAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+          surah: activeSession?.surah || "Al-Fatihah",
+          surahNumber: 1,
+          startAyah: 1,
+          endAyah: 7
+        });
+        
+        // Populate mock words
+        const mockWords = MOCK_QURAN_TEXT.words.map((w, idx) => ({
+          id: `1-${idx}`,
+          text: w.text,
+          ayah: w.ayah,
+          transliteration: w.transliteration,
+          translation: w.translation
+        }));
+        setQuranWords(mockWords);
+        setLoading(false);
+        return;
       }
-      return next;
-    });
-    setSelectedWord(null); // close selection
+
+      try {
+        setLoading(true);
+        // Query specific booking details
+        const { data: booking, error: dbError } = await supabase
+          .from('bookings')
+          .select('*, student:users!bookings_student_id_fkey(full_name)')
+          .eq('id', activeSession.id)
+          .single();
+
+        if (dbError) throw dbError;
+
+        const surahNum = booking.surah_number || 1;
+        const startA = booking.start_ayah || 1;
+        const endA = booking.end_ayah || 7;
+
+        // Load Surah names
+        const surahName = ALL_SURAHS[surahNum - 1] || `Surah #${surahNum}`;
+
+        if (mounted) {
+          setBookingData({
+            id: booking.id,
+            studentName: booking.student?.full_name || "Ahmad Fauzi",
+            studentAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+            surah: surahName,
+            surahNumber: surahNum,
+            startAyah: startA,
+            endAyah: endA
+          });
+        }
+
+        // Fetch Arabic Uthmani verses from standard public API
+        const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/quran-uthmani`);
+        if (!response.ok) throw new Error("Failed to fetch Quranic verses from API");
+        const json = await response.json();
+        
+        if (json.code === 200 && json.data?.ayahs) {
+          const ayahs = json.data.ayahs;
+          // Filter within start & end bounds
+          const filtered = ayahs.filter(a => a.numberInSurah >= startA && a.numberInSurah <= endA);
+          
+          // Tokenize into individual words
+          const tokenizedWords = [];
+          filtered.forEach(ayah => {
+            const verseText = ayah.text;
+            // Clean/remove Bismillah prefix if it is appended in API response but not requested (except Al-Fatihah first verse)
+            let cleanedText = verseText;
+            if (surahNum !== 1 && surahNum !== 9 && cleanedText.startsWith("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ")) {
+              cleanedText = cleanedText.replace("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", "").trim();
+            }
+
+            const words = cleanedText.split(/\s+/);
+            words.forEach((wordStr, wordIdx) => {
+              if (wordStr.trim() !== '') {
+                tokenizedWords.push({
+                  id: `${ayah.numberInSurah}-${wordIdx}`,
+                  text: wordStr,
+                  ayah: ayah.numberInSurah,
+                  wordIndex: wordIdx,
+                  transliteration: `Ayah ${ayah.numberInSurah}, Word ${wordIdx + 1}`,
+                  translation: `Recitation element from Surah ${surahName}`
+                });
+              }
+            });
+          });
+
+          if (mounted) {
+            setQuranWords(tokenizedWords);
+          }
+        }
+      } catch (err) {
+        console.error("Evaluation loading failed:", err);
+        if (mounted) {
+          setErrorMessage(err.message || "Failed to load classroom context.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadSessionData();
+    return () => {
+      mounted = false;
+    };
+  }, [activeSession]);
+
+  // Click handler to toggle mistake highlight status directly
+  const handleWordClick = (wordId) => {
+    setMistakeIndexes(prev => 
+      prev.includes(wordId)
+        ? prev.filter(id => id !== wordId)
+        : [...prev, wordId]
+    );
   };
 
-  // Count errors
-  const minorErrorsCount = Object.values(wordStates).filter(v => v === 'minor').length;
-  const majorErrorsCount = Object.values(wordStates).filter(v => v === 'major').length;
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
+    if (!bookingData) return;
     
-    setTimeout(() => {
-      onSubmitEvaluation(session.id, {
-        minorErrors: minorErrorsCount,
-        majorErrors: majorErrorsCount,
-        feedback: feedback || "Alhamdulillah, excellent effort in recitation. Focus on highlighted areas.",
-        wordStates: wordStates
+    setSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      if (bookingData.id !== 'mock-booking-id') {
+        // 1. Insert record into public.session_notes
+        const { error: notesError } = await supabase
+          .from('session_notes')
+          .insert({
+            booking_id: bookingData.id,
+            mistake_words: mistakeIndexes,
+            feedback: feedback || "Alhamdulillah, recitation session completed."
+          });
+
+        if (notesError) throw notesError;
+
+        // 2. Update the booking status strictly to 'completed'
+        const { error: bookingError } = await supabase
+          .from('bookings')
+          .update({ status: 'completed' })
+          .eq('id', bookingData.id);
+
+        if (bookingError) throw bookingError;
+      }
+
+      // 3. Trigger parent updates and redirection
+      onSubmitEvaluation(bookingData.id, {
+        minorErrors: mistakeIndexes.length,
+        majorErrors: 0,
+        feedback: feedback || "Alhamdulillah, recitation session completed."
       });
+
+    } catch (err) {
+      console.error("Failed to complete evaluation:", err);
+      setErrorMessage(err.message || "Failed to submit evaluation results.");
+    } finally {
       setSubmitting(false);
-    }, 1000);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 space-y-4">
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-600 rounded-full animate-spin"></div>
+          <span className="absolute text-2xl animate-pulse">🕌</span>
+        </div>
+        <div className="text-center space-y-1 animate-fadeIn">
+          <h3 className="text-md font-bold text-slate-800 m-0">Synchronizing Recitation Board</h3>
+          <p className="text-xs text-slate-400 font-semibold m-0">Retrieving Uthmani verses from stable public API...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorMessage && !bookingData) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white border border-rose-100 rounded-3xl p-8 text-center shadow-xl space-y-6 animate-fadeIn">
+          <div className="w-16 h-16 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-center text-rose-600 mx-auto">
+            <XCircle size={32} />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-slate-800 m-0">System Disconnection</h2>
+            <p className="text-xs text-slate-400 font-semibold">{errorMessage}</p>
+          </div>
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition-all active:scale-95 cursor-pointer w-full"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Group the tokenized words dynamically by Ayah number in-render
+  const ayahsMap = {};
+  quranWords.forEach(word => {
+    if (!ayahsMap[word.ayah]) {
+      ayahsMap[word.ayah] = [];
+    }
+    ayahsMap[word.ayah].push(word);
+  });
 
   return (
     <div className="space-y-8">
@@ -71,8 +245,8 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <img 
-            src={session.studentAvatar} 
-            alt={session.studentName} 
+            src={bookingData.studentAvatar} 
+            alt={bookingData.studentName} 
             className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shadow-sm"
           />
           <div>
@@ -80,39 +254,35 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
               Live Recitation Assessment
             </span>
             <h2 className="text-xl font-bold text-slate-800 m-0 leading-snug mt-1">
-              Student: {session.studentName}
+              Student: {bookingData.studentName}
             </h2>
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold mt-0.5">
-              <span>Target: Surah {session.surah}</span>
+              <span>Target: {bookingData.surah}</span>
               <span>•</span>
-              <span>Ayahs {session.ayahRange}</span>
+              <span>Ayahs {bookingData.startAyah} - {bookingData.endAyah}</span>
             </div>
           </div>
         </div>
 
         {/* Counter Badges */}
         <div className="flex gap-4">
-          <div className="bg-amber-50 border border-amber-100 px-4 py-2.5 rounded-2xl flex items-center gap-3">
-            <div className="p-2 bg-amber-500 rounded-xl text-white">
-              <AlertTriangle size={18} />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Minor Slips</span>
-              <span className="text-lg font-bold text-amber-700 leading-none mt-1 inline-block">{minorErrorsCount}</span>
-            </div>
-          </div>
-
           <div className="bg-rose-50 border border-rose-100 px-4 py-2.5 rounded-2xl flex items-center gap-3">
             <div className="p-2 bg-rose-500 rounded-xl text-white">
               <XCircle size={18} />
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Major Mistakes</span>
-              <span className="text-lg font-bold text-rose-700 leading-none mt-1 inline-block">{majorErrorsCount}</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase block leading-none">Flagged Errors</span>
+              <span className="text-lg font-bold text-rose-700 leading-none mt-1 inline-block">{mistakeIndexes.length}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-xs font-semibold">
+          ⚠️ {errorMessage}
+        </div>
+      )}
 
       {/* Main Assessment Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -123,100 +293,52 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
             <div className="flex justify-center mb-8">
               <div className="border border-emerald-600/20 rounded-full px-6 py-1.5 bg-emerald-50 text-emerald-800 font-bold text-xs uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
                 <Bookmark size={12} className="fill-emerald-800" />
-                <span>Al-Fatihah recitation board</span>
+                <span>{bookingData.surah} recitation board</span>
               </div>
             </div>
 
             {/* Quran Word-by-Word Area */}
-            <div className="quran-text text-right text-3xl md:text-4xl leading-[2.2] md:leading-[2.5] flex flex-wrap justify-center gap-x-5 gap-y-8 select-none p-4 max-w-2xl mx-auto border border-emerald-800/10 rounded-2xl bg-white/70 backdrop-blur-sm shadow-inner">
-              {MOCK_QURAN_TEXT.words.map((word) => {
-                const state = wordStates[word.id];
-                let bgStyle = "hover:bg-slate-100 text-slate-800 border-slate-200/20 hover:border-slate-300";
-                if (state === 'minor') {
-                  bgStyle = "bg-amber-100 border-amber-300 text-amber-900 font-bold shadow-sm shadow-amber-500/10";
-                } else if (state === 'major') {
-                  bgStyle = "bg-rose-100 border-rose-300 text-rose-950 font-bold shadow-sm shadow-rose-500/10 animate-pulse";
-                }
+            <div 
+              className="quran-text text-right text-3xl md:text-4xl leading-[2.2] md:leading-[2.5] flex flex-col gap-6 select-none p-6 max-w-2xl mx-auto border border-emerald-800/10 rounded-2xl bg-white/70 backdrop-blur-sm shadow-inner"
+              style={{ direction: 'rtl' }}
+            >
+              {Object.keys(ayahsMap).sort((a, b) => Number(a) - Number(b)).map((ayahNum) => (
+                <div 
+                  key={ayahNum}
+                  className="flex flex-wrap gap-x-4 gap-y-4 justify-start pb-4 border-b border-emerald-800/5 last:border-0 last:pb-0"
+                >
+                  {ayahsMap[ayahNum].map((word) => {
+                    const isMistake = mistakeIndexes.includes(word.id);
+                    const bgStyle = isMistake
+                      ? "bg-red-200 text-red-900 rounded-md border-red-300 font-bold shadow-sm shadow-red-500/10 transition-colors"
+                      : "hover:bg-slate-100 text-slate-800 border-slate-200/20 hover:border-slate-300";
 
-                return (
-                  <span 
-                    key={word.id}
-                    onClick={() => handleWordClick(word)}
-                    className={`px-3 py-1.5 border rounded-xl cursor-pointer transition-all duration-200 inline-block text-center transform hover:scale-[1.05] active:scale-[0.95] ${bgStyle}`}
-                  >
-                    {word.text}
-                    {/* Tiny small Ayah indicator */}
-                    {word.id === "w4" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">١</span>}
-                    {word.id === "w8" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٢</span>}
-                    {word.id === "w10" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٣</span>}
-                    {word.id === "w13" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٤</span>}
-                    {word.id === "w17" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٥</span>}
-                    {word.id === "w20" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٦</span>}
-                    {word.id === "w29" && <span className="text-[14px] text-emerald-600 font-sans border-2 border-emerald-600/30 rounded-full px-1.5 mx-1 font-extrabold select-none">٧</span>}
+                    return (
+                      <span 
+                        key={word.id}
+                        onClick={() => handleWordClick(word.id)}
+                        className={`px-3 py-1.5 border rounded-xl cursor-pointer transition-all duration-200 inline-block text-center transform hover:scale-[1.05] active:scale-[0.95] ${bgStyle}`}
+                      >
+                        {word.text}
+                      </span>
+                    );
+                  })}
+                  {/* Premium Ayah End Ornament Indicator */}
+                  <span className="text-emerald-700/50 font-serif font-extrabold text-2xl self-center px-2 select-none">
+                    ﴿{ayahNum}﴾
                   </span>
-                );
-              })}
+                </div>
+              ))}
             </div>
 
             <div className="mt-8 text-center text-xs text-slate-400 font-semibold flex items-center justify-center gap-1.5">
-              <span>💡 Tip: Click on any word above to audit and tag recitation accuracy/slips.</span>
+              <span>💡 Tip: Click on any Arabic word above directly to flag recitation mistakes/highlights.</span>
             </div>
           </div>
         </div>
 
         {/* Evaluation and Feedback Sidebar */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Word inspector / selector */}
-          <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-6">
-            <h3 className="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
-              <BookOpen size={16} className="text-emerald-600" />
-              Word Inspector
-            </h3>
-
-            {selectedWord ? (
-              <div className="mt-4 space-y-4 animate-fadeIn">
-                <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-center space-y-1 relative">
-                  <span className="quran-text text-3xl font-bold text-emerald-800 leading-none">{selectedWord.text}</span>
-                  <p className="text-xs font-semibold text-slate-500 font-sans italic">{selectedWord.transliteration}</p>
-                  <span className="text-[10px] text-slate-400 font-bold block uppercase mt-2">English Translation</span>
-                  <p className="text-xs text-slate-600 font-medium font-sans">"{selectedWord.translation}"</p>
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Tag Recitation Status</span>
-                  
-                  <button 
-                    onClick={() => setWordStatus(selectedWord.id, 'none')}
-                    className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer bg-white"
-                  >
-                    <CheckCircle size={14} className="text-emerald-500" />
-                    <span>No Error (Correct Recitation)</span>
-                  </button>
-
-                  <button 
-                    onClick={() => setWordStatus(selectedWord.id, 'minor')}
-                    className="w-full py-2.5 px-4 rounded-xl border border-amber-200 hover:border-amber-300 text-amber-800 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer bg-amber-50"
-                  >
-                    <AlertTriangle size={14} className="text-amber-500" />
-                    <span>Minor Tajweed Slip (Madd, Ghunnah)</span>
-                  </button>
-
-                  <button 
-                    onClick={() => setWordStatus(selectedWord.id, 'major')}
-                    className="w-full py-2.5 px-4 rounded-xl border border-rose-200 hover:border-rose-300 text-rose-800 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer bg-rose-50"
-                  >
-                    <XCircle size={14} className="text-rose-500" />
-                    <span>Major Makhraj/Hifz Mistake</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 p-6 border-2 border-dashed border-slate-100 rounded-2xl text-center text-slate-400 text-xs font-semibold">
-                Click a word in the recitation board to view definitions and tag recitation issues.
-              </div>
-            )}
-          </div>
-
           {/* Feedback Form */}
           <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-6">
             <h3 className="text-sm font-bold text-slate-800 m-0 flex items-center gap-2">
@@ -228,9 +350,9 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600 block">Recitation Guidance / Advice</label>
                 <textarea
-                  rows="3"
+                  rows="5"
                   required
-                  placeholder="Introduce tips for Al-Fatihah, e.g. Be careful to recite the letter Haa (ح) accurately in 'ar-Rahman'."
+                  placeholder="Introduce tips, e.g. Be careful to recite the letters accurately with standard tajweed guidance."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white"
@@ -257,7 +379,7 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
                     </>
                   ) : (
                     <>
-                      <span>Submit Evaluation</span>
+                      <span>Complete Session</span>
                     </>
                   )}
                 </button>
