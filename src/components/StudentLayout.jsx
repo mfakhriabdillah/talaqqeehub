@@ -8,12 +8,12 @@ import {
   Menu,
   X
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 export default function StudentLayout({ user, currentView, setView, onLogout, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const menuItems = [
     { id: 'dashboard', label: 'My Dashboard', icon: BookOpen },
-    { id: 'book-session', label: 'Book Session', icon: Calendar },
   ];
 
   return (
@@ -86,15 +86,6 @@ export default function StudentLayout({ user, currentView, setView, onLogout, ch
             );
           })}
 
-          {/* Simulated Route Guard Tester */}
-          <div className="pt-4 border-t border-slate-800 mt-4">
-            <button
-              onClick={() => setView('mushaf-evaluation')}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-[10px] uppercase font-bold tracking-wider text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 transition-all cursor-pointer"
-            >
-              <span>⚠️ Test Route Guard</span>
-            </button>
-          </div>
         </nav>
 
         {/* Sign Out */}
@@ -133,11 +124,8 @@ export default function StudentLayout({ user, currentView, setView, onLogout, ch
 
           {/* User Profile and Notifications */}
           <div className="flex items-center gap-4">
-            {/* Notifications */}
-            <button className="relative p-2 bg-slate-50 border border-slate-100 hover:bg-slate-100 rounded-full transition-colors cursor-pointer">
-              <Bell size={18} className="text-slate-600" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full"></span>
-            </button>
+            {/* Notifications NotificationCenter */}
+            <NotificationBell userId={user?.id} />
 
             {/* Profile Menus */}
             <div className="flex items-center gap-2.5 border-l border-slate-100 pl-4">

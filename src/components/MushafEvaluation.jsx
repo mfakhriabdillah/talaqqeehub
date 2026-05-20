@@ -176,6 +176,31 @@ export default function MushafEvaluation({ activeSession, onSubmitEvaluation, on
           .eq('id', bookingData.id);
 
         if (bookingError) throw bookingError;
+
+        // Action D: Trigger student notification
+        try {
+          const { data: bDetails } = await supabase
+            .from('bookings')
+            .select(`
+              student_id,
+              teacher:users!bookings_teacher_id_fkey(full_name)
+            `)
+            .eq('id', bookingData.id)
+            .single();
+
+          if (bDetails?.student_id) {
+            const teacherName = bDetails.teacher?.full_name || "Your Teacher";
+            await supabase
+              .from('notifications')
+              .insert({
+                user_id: bDetails.student_id,
+                title: "Evaluation Report Ready",
+                message: `${teacherName} has submitted your recitation evaluation and feedback.`
+              });
+          }
+        } catch (notifErr) {
+          console.error("Failed to trigger evaluation notification:", notifErr);
+        }
       }
 
       // 3. Trigger parent updates and redirection

@@ -18,7 +18,7 @@ import {
   Bookmark
 } from 'lucide-react';
 
-export default function StudentDashboard({ sessions, onAddSession, subView = 'dashboard' }) {
+export default function StudentDashboard({ sessions, onAddSession, subView = 'dashboard', setView }) {
   const { user, profile } = useAuth();
   
   // Booking Form State
@@ -241,6 +241,20 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
 
       if (error) throw error;
 
+      // Action A: Notify teacher of new booking request
+      try {
+        const studentName = profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0];
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: ustadzId,
+            title: "New Booking Request",
+            message: `${studentName} has requested a Talaqqi session for Surah #${surahNumber}`
+          });
+      } catch (notifErr) {
+        console.error("Failed to trigger booking notification:", notifErr);
+      }
+
       // 4. Form Success & Reset
       setIsSuccess(true);
       setNotes('');
@@ -344,16 +358,24 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
             {/* Left Column: Recitation Sessions Schedule */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 md:p-8">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800 m-0">Recitation Sessions Schedule</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-1">
                       Click completed cards to review teacher marks and word-by-word audits.
                     </p>
                   </div>
-                  <span className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full w-max">
-                    {studentSessions.length} Sessions total
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-full w-max whitespace-nowrap">
+                      {studentSessions.length} Sessions total
+                    </span>
+                    <button 
+                      onClick={() => setView && setView('book-session')}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-600/25 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <span>+ Book New Session</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Session Card List */}

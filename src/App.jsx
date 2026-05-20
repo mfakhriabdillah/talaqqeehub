@@ -152,11 +152,31 @@ export default function App() {
     const isRealDbBooking = typeof sessionId === 'string' && sessionId.length > 20;
     if (isRealDbBooking) {
       try {
+        // Query student_id before update
+        const { data: bookingData } = await supabase
+          .from('bookings')
+          .select('student_id')
+          .eq('id', sessionId)
+          .single();
+
         const { error } = await supabase
           .from('bookings')
           .update({ status: 'confirmed' })
           .eq('id', sessionId);
         if (error) throw error;
+
+        // Action B: Notify student of booking confirmation
+        if (bookingData?.student_id) {
+          const teacherName = profile?.full_name || user.user_metadata?.full_name || user.email;
+          await supabase
+            .from('notifications')
+            .insert({
+              user_id: bookingData.student_id,
+              title: "Booking Confirmed!",
+              message: `Your Talaqqi session request has been accepted by ${teacherName}`
+            });
+        }
+
         await loadBookings();
       } catch (err) {
         console.error("Error accepting booking:", err);
@@ -175,11 +195,31 @@ export default function App() {
     const isRealDbBooking = typeof sessionId === 'string' && sessionId.length > 20;
     if (isRealDbBooking) {
       try {
+        // Query student_id before update
+        const { data: bookingData } = await supabase
+          .from('bookings')
+          .select('student_id')
+          .eq('id', sessionId)
+          .single();
+
         const { error } = await supabase
           .from('bookings')
           .update({ status: 'cancelled' })
           .eq('id', sessionId);
         if (error) throw error;
+
+        // Action C: Notify student of booking cancellation
+        if (bookingData?.student_id) {
+          const teacherName = profile?.full_name || user.user_metadata?.full_name || user.email;
+          await supabase
+            .from('notifications')
+            .insert({
+              user_id: bookingData.student_id,
+              title: "Booking Cancelled",
+              message: `Your Talaqqi session request was declined or cancelled by ${teacherName}`
+            });
+        }
+
         await loadBookings();
       } catch (err) {
         console.error("Error declining booking:", err);
@@ -307,6 +347,7 @@ export default function App() {
             sessions={combinedSessions} 
             onAddSession={handleAddSession} 
             subView="dashboard"
+            setView={setView}
           />
         )}
         {currentView === 'book-session' && (
@@ -314,6 +355,7 @@ export default function App() {
             sessions={combinedSessions} 
             onAddSession={handleAddSession} 
             subView="book"
+            setView={setView}
           />
         )}
       </StudentLayout>
