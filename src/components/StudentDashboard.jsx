@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { USTADZ_LIST, SURAH_LIST, MOCK_QURAN_TEXT } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { USTADZ_LIST, SURAH_LIST, MOCK_QURAN_TEXT, ALL_SURAHS } from '../data/mockData';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { 
   Calendar, 
   User, 
@@ -17,57 +19,137 @@ import {
 } from 'lucide-react';
 
 export default function StudentDashboard({ sessions, onAddSession, subView = 'dashboard' }) {
+  const { user, profile } = useAuth();
+  
   // Booking Form State
-  const [ustadzId, setUstadzId] = useState(USTADZ_LIST[0].id);
+  const [ustadzId, setUstadzId] = useState('');
   const [date, setDate] = useState('2026-05-20');
   const [time, setTime] = useState('10:00');
-  const [surah, setSurah] = useState('Al-Fatihah');
+  const [surahNumber, setSurahNumber] = useState(1);
   const [ayahStart, setAyahStart] = useState('1');
   const [ayahEnd, setAyahEnd] = useState('7');
   const [notes, setNotes] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  // Dynamically loaded teachers list
+  const [teachers, setTeachers] = useState([]);
+
+  // Fetch teachers from Supabase public.users on mount
+  useEffect(() => {
+    let mounted = true;
+    const fetchTeachers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name, specialty')
+          .eq('role', 'teacher');
+        
+        if (error) throw error;
+        
+        if (mounted) {
+          if (data && data.length > 0) {
+            setTeachers(data);
+            setUstadzId(data[0].id);
+          } else {
+            // Fallback to mock list if no teachers in DB yet
+            const formattedMock = USTADZ_LIST.map(u => ({
+              id: u.id,
+              full_name: u.name,
+              specialty: u.specialty
+            }));
+            setTeachers(formattedMock);
+            setUstadzId(formattedMock[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading teachers:", err);
+        if (mounted) {
+          // Robust graceful fallback
+          const formattedMock = USTADZ_LIST.map(u => ({
+            id: u.id,
+            full_name: u.name,
+            specialty: u.specialty
+          }));
+          setTeachers(formattedMock);
+          setUstadzId(formattedMock[0].id);
+        }
+      }
+    };
+
+    fetchTeachers();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Review Modal State
   const [selectedCompletedSession, setSelectedCompletedSession] = useState(null);
   const [modalSelectedWord, setModalSelectedWord] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const ustadz = USTADZ_LIST.find(u => u.id === ustadzId);
-    
-    const newSession = {
-      id: `sess-${Date.now()}`,
-      studentId: "stud-1",
-      studentName: "Ahmad Fauzi",
-      studentAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-      ustadzId: ustadzId,
-      ustadzName: ustadz ? ustadz.name : 'Unknown Ustadz',
-      date: date,
-      time: time,
-      surah: surah,
-      ayahRange: `${ayahStart}-${ayahEnd}`,
-      status: 'Pending',
-      notes: notes,
-      evaluation: null
-    };
+    if (!user) {
+      setErrorMessage("You must be authenticated to request a booking.");
+      return;
+    }
+    if (!ustadzId) {
+      setErrorMessage("Please select a teacher/ustadz.");
+      return;
+    }
 
-    onAddSession(newSession);
-    setIsSuccess(true);
-    setNotes('');
-    
-    // Auto reset success message
-    setTimeout(() => {
-      setIsSuccess(false);
-    }, 4000);
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setIsSuccess(false);
+
+    try {
+      const scheduleTime = `${date}T${time}:00Z`;
+      // 3. Insert into public.bookings
+      const { error } = await supabase
+        .from('bookings')
+        .insert({
+          student_id: user.id,
+          teacher_id: ustadzId,
+          schedule_time: scheduleTime,
+          surah_number: parseInt(surahNumber, 10),
+          start_ayah: parseInt(ayahStart, 10),
+          end_ayah: parseInt(ayahEnd, 10),
+          status: 'pending',
+          notes: notes
+        });
+
+      if (error) throw error;
+
+      // 4. Form Success & Reset
+      setIsSuccess(true);
+      setNotes('');
+      
+      // Auto-refresh layout sessions
+      if (onAddSession) {
+        onAddSession();
+      }
+
+      // Auto reset success message
+      setTimeout(() => {
+        setIsSuccess(false);
+      }, 4000);
+
+    } catch (err) {
+      console.error("Booking submission failed:", err);
+      setErrorMessage(err.message || "Failed to submit booking. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Stats computation
-  const completedSessions = sessions.filter(s => s.status === 'Completed').length;
-  const pendingSessions = sessions.filter(s => s.status === 'Pending').length;
+  const completedSessions = sessions.filter(s => s.studentId === user?.id && s.status === 'Completed').length || sessions.filter(s => s.status === 'Completed').length;
+  const pendingSessions = sessions.filter(s => s.studentId === user?.id && s.status === 'Pending').length || sessions.filter(s => s.status === 'Pending').length;
   const activeGoal = "Al-Mulk Memorization";
 
-  // Filter student sessions for Ahmad Fauzi (stud-1)
-  const studentSessions = sessions.filter(s => s.studentId === 'stud-1');
+  // Filter student sessions dynamically (either match real user ID or default mock stud-1 for preview fullness)
+  const studentSessions = sessions.filter(s => s.studentId === user?.id || (s.studentId === 'stud-1' && !sessions.some(realS => realS.studentId === user?.id)));
 
   // Sub-view Renders
   const isDashboardView = subView === 'dashboard';
@@ -82,7 +164,9 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
           <span className="bg-emerald-500/30 text-emerald-100 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block">
             Assalamu'alaikum
           </span>
-          <h1 className="text-3xl font-extrabold m-0 text-white leading-tight">Ahmad Fauzi</h1>
+          <h1 className="text-3xl font-extrabold m-0 text-white leading-tight">
+            {profile?.full_name || user?.user_metadata?.full_name || "Ahmad Fauzi"}
+          </h1>
           <p className="text-emerald-100 max-w-xl text-sm font-medium">
             "The best of you are those who learn the Qur'an and teach it." Let's continue your recitation journey today.
           </p>
@@ -285,6 +369,13 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
               </div>
             )}
 
+            {errorMessage && (
+              <div className="p-4 bg-rose-50 border border-rose-100 text-rose-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <XCircle size={16} className="text-rose-600" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Ustadz selection */}
               <div className="space-y-1">
@@ -293,12 +384,17 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                   value={ustadzId}
                   onChange={(e) => setUstadzId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
+                  disabled={isSubmitting}
                 >
-                  {USTADZ_LIST.map((ustadz) => (
-                    <option key={ustadz.id} value={ustadz.id}>
-                      {ustadz.name} ({ustadz.specialty.split(' ')[0]})
-                    </option>
-                  ))}
+                  {teachers.length === 0 ? (
+                    <option value="" disabled>Loading Teachers...</option>
+                  ) : (
+                    teachers.map((ustadz) => (
+                      <option key={ustadz.id} value={ustadz.id}>
+                        {ustadz.full_name || ustadz.name} {ustadz.specialty ? `(${ustadz.specialty.split(' ')[0]})` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -330,12 +426,15 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600 block">Select Surah</label>
                 <select
-                  value={surah}
-                  onChange={(e) => setSurah(e.target.value)}
+                  value={surahNumber}
+                  onChange={(e) => setSurahNumber(parseInt(e.target.value, 10))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
+                  disabled={isSubmitting}
                 >
-                  {SURAH_LIST.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name} ({s.type})</option>
+                  {ALL_SURAHS.map((sName, idx) => (
+                    <option key={idx + 1} value={idx + 1}>
+                      {idx + 1}. {sName}
+                    </option>
                   ))}
                 </select>
               </div>

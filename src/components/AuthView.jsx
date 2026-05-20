@@ -11,10 +11,13 @@ import {
   Star,
   Eye,
   EyeOff,
-  ChevronDown
+  ChevronDown,
+  ShieldAlert
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function AuthView({ onLogin }) {
+  const { signIn, signUp } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('ahmad@talaqqihub.com');
@@ -22,6 +25,7 @@ export default function AuthView({ onLogin }) {
   const [name, setName] = useState('Ahmad Fauzi');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleQuickFill = (selectedRole) => {
     setRole(selectedRole);
@@ -32,23 +36,24 @@ export default function AuthView({ onLogin }) {
       setEmail('ustadz.abdul@talaqqihub.com');
       setName('Ustadz Abdul Somad, Lc., M.A.');
     }
+    setError(null);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      if (isLogin) {
+        await signIn(email, password);
+      } else {
+        await signUp(email, password, name, role);
+      }
+    } catch (err) {
+      console.error("Authentication failed:", err);
+      setError(err.message || "Invalid credentials or connection error.");
       setLoading(false);
-      onLogin({
-        id: role === 'student' ? 'stud-1' : 'u1',
-        name: isLogin ? (role === 'student' ? 'Ahmad Fauzi' : 'Ustadz Abdul Somad, Lc., M.A.') : name,
-        email: email,
-        avatar: role === 'student' 
-          ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"
-          : "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-        role: role
-      });
-    }, 1200);
+    }
   };
 
   return (
@@ -166,6 +171,16 @@ export default function AuthView({ onLogin }) {
                 : "Register as a new student to begin your custom recitation pathways today."}
             </p>
           </div>
+
+          {error && (
+            <div className="p-4 bg-rose-50 border border-rose-100 rounded-3xl flex items-start gap-3 animate-fadeIn text-rose-800 text-xs font-semibold">
+              <ShieldAlert size={16} className="text-rose-500 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold m-0 text-slate-800">Authentication Error</p>
+                <p className="text-rose-600/90 font-medium m-0 leading-relaxed">{error}</p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Demo Quick-Fill Pill Segments */}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { USTADZ_LIST } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
   Hourglass, 
@@ -14,8 +15,17 @@ import {
 } from 'lucide-react';
 
 export default function TeacherDashboard({ sessions, onAcceptSession, onDeclineSession, onStartEvaluation }) {
-  const pendingRequests = sessions.filter(s => s.status === 'Pending');
-  const confirmedSessions = sessions.filter(s => s.status === 'Confirmed');
+  const { user, profile } = useAuth();
+
+  // Filter sessions: only show sessions that belong to the active logged-in teacher
+  // Or show mock sessions if there are no database sessions associated with this teacher yet (for dashboard fullness)
+  const hasRealTeacherSessions = sessions.some(s => s.ustadzId === user?.id);
+  const teacherSessions = hasRealTeacherSessions 
+    ? sessions.filter(s => s.ustadzId === user?.id)
+    : sessions;
+
+  const pendingRequests = teacherSessions.filter(s => s.status === 'Pending');
+  const confirmedSessions = teacherSessions.filter(s => s.status === 'Confirmed');
   
   // Stats calculations
   const totalStudentsCount = 14;
@@ -30,14 +40,16 @@ export default function TeacherDashboard({ sessions, onAcceptSession, onDeclineS
         <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
           <img 
             src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80" 
-            alt="Ustadz Abdul Somad" 
+            alt={profile?.full_name || "Ustadz Abdul Somad"} 
             className="w-20 h-20 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-md"
           />
           <div className="space-y-2 text-center md:text-left">
             <span className="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block border border-emerald-500/30">
               Welcome back, Ustadz
             </span>
-            <h1 className="text-3xl font-extrabold m-0 text-white leading-tight">Ustadz Abdul Somad, Lc.</h1>
+            <h1 className="text-3xl font-extrabold m-0 text-white leading-tight">
+              {profile?.full_name || user?.user_metadata?.full_name || "Ustadz Abdul Somad, Lc."}
+            </h1>
             <p className="text-slate-400 max-w-xl text-xs font-medium">
               You have <span className="text-emerald-400 font-bold">{pendingRequests.length} pending recitation requests</span> requiring your confirmation today.
             </p>
