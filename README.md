@@ -42,7 +42,7 @@ Lack of Progress Tracking: Without a digital history, students forget their past
 - Supabase Realtime (WebSockets)
 
 ### Third-Party Integration:
-Al Quran Cloud API: Fetches Uthmani Arabic text dynamically based on Surah and Ayah parameters.
+[Al Quran Cloud API](https://api.quran.cloud): Fetches Uthmani Arabic text dynamically based on Surah and Ayah parameters.
 
 ## Database Schema
 
