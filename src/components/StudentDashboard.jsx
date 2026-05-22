@@ -18,6 +18,21 @@ import {
   Bookmark
 } from 'lucide-react';
 
+const SuraAyahsMap = {
+  1: 7, 2: 286, 3: 200, 4: 176, 5: 120, 6: 165, 7: 206, 8: 75, 9: 129, 10: 109,
+  11: 123, 12: 111, 13: 43, 14: 52, 15: 99, 16: 128, 17: 111, 18: 110, 19: 98, 20: 135,
+  21: 112, 22: 78, 23: 118, 24: 64, 25: 77, 26: 227, 27: 93, 28: 88, 29: 69, 30: 60,
+  31: 34, 32: 30, 33: 73, 34: 54, 35: 45, 36: 83, 37: 182, 38: 88, 39: 75, 40: 85,
+  41: 54, 42: 53, 43: 89, 44: 59, 45: 37, 46: 35, 47: 38, 48: 29, 49: 18, 50: 45,
+  51: 60, 52: 49, 53: 62, 54: 55, 55: 78, 56: 96, 57: 29, 58: 22, 59: 24, 60: 13,
+  61: 14, 62: 11, 63: 11, 64: 18, 65: 12, 66: 12, 67: 30, 68: 52, 69: 52, 70: 44,
+  71: 28, 72: 28, 73: 20, 74: 56, 75: 40, 76: 31, 77: 50, 78: 40, 79: 46, 80: 42,
+  81: 29, 82: 19, 83: 36, 84: 25, 85: 22, 86: 17, 87: 19, 88: 26, 89: 30, 90: 20,
+  91: 15, 92: 21, 93: 11, 94: 8, 95: 8, 96: 19, 97: 5, 98: 8, 99: 8, 100: 11,
+  101: 11, 102: 8, 103: 3, 104: 9, 105: 5, 106: 4, 107: 7, 108: 3, 109: 6, 110: 3,
+  111: 3, 112: 4, 113: 5, 114: 6
+};
+
 export default function StudentDashboard({ sessions, onAddSession, subView = 'dashboard', setView }) {
   const { user, profile } = useAuth();
   
@@ -33,6 +48,63 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
+  // Surah Ayah counts mapping and Dynamic toast state
+  const [surahAyahCounts, setSurahAyahCounts] = useState(SuraAyahsMap);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'error') => {
+    setToast({ message, type });
+  };
+
+  // Clear toast dynamically or auto-dismiss
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Dynamically fetch Surah metadata on mount
+  useEffect(() => {
+    let active = true;
+    const fetchSurahMetadata = async () => {
+      try {
+        const response = await fetch('https://api.alquran.cloud/v1/surah');
+        if (response.ok) {
+          const json = await response.json();
+          if (json.code === 200 && json.data && active) {
+            const counts = {};
+            json.data.forEach(s => {
+              counts[s.number] = s.numberOfAyahs;
+            });
+            setSurahAyahCounts(counts);
+          }
+        }
+      } catch (err) {
+        console.error("API fetch failed, falling back to local SuraAyahsMap:", err);
+      }
+    };
+
+    fetchSurahMetadata();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Handle selected Surah change: auto cap or reset Ayah inputs to match selected Surah bounds
+  useEffect(() => {
+    const maxAyahs = surahAyahCounts[surahNumber] || 7;
+    const currentStart = parseInt(ayahStart, 10);
+    const currentEnd = parseInt(ayahEnd, 10);
+
+    if (isNaN(currentStart) || currentStart > maxAyahs || currentStart < 1) {
+      setAyahStart('1');
+    }
+    if (isNaN(currentEnd) || currentEnd > maxAyahs || currentEnd < 1) {
+      setAyahEnd(String(maxAyahs));
+    }
+  }, [surahNumber, surahAyahCounts]);
+
   // Dynamically loaded teachers list
   const [teachers, setTeachers] = useState([]);
 
@@ -219,6 +291,30 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
       return;
     }
 
+    // Dynamic Validation Check
+    const start = parseInt(ayahStart, 10);
+    const end = parseInt(ayahEnd, 10);
+    const maxAyahs = surahAyahCounts[surahNumber] || 7;
+
+    if (isNaN(start) || start <= 0) {
+      const msg = "Start Ayah must be a positive number greater than 0.";
+      setErrorMessage(msg);
+      showToast(msg, "error");
+      return;
+    }
+    if (isNaN(end) || end > maxAyahs) {
+      const msg = `End Ayah cannot exceed the maximum of ${maxAyahs} Ayahs for the selected Surah.`;
+      setErrorMessage(msg);
+      showToast(msg, "error");
+      return;
+    }
+    if (start > end) {
+      const msg = "Start Ayah must be less than or equal to End Ayah.";
+      setErrorMessage(msg);
+      showToast(msg, "error");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
     setIsSuccess(false);
@@ -258,6 +354,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
       // 4. Form Success & Reset
       setIsSuccess(true);
       setNotes('');
+      showToast("Talaqqi recitation booking requested successfully!", "success");
       
       // Auto-refresh layout sessions
       if (onAddSession) {
@@ -385,6 +482,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                     const isPending = sess.status === 'Pending';
                     const isConfirmed = sess.status === 'Confirmed';
                     const isCompleted = sess.status === 'Completed';
+                    const isCancelled = sess.status === 'Cancelled' || sess.status === 'cancelled';
 
                     return (
                       <div 
@@ -440,6 +538,11 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                           {isConfirmed && (
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border border-emerald-200">
                               Confirmed Schedule
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="bg-rose-50 text-rose-600 text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border border-rose-200">
+                              DECLINED
                             </span>
                           )}
                           {isCompleted && (
@@ -593,6 +696,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                   <input
                     type="number"
                     min="1"
+                    max={surahAyahCounts[surahNumber] || 7}
                     required
                     value={ayahStart}
                     onChange={(e) => setAyahStart(e.target.value)}
@@ -604,6 +708,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                   <input
                     type="number"
                     min="1"
+                    max={surahAyahCounts[surahNumber] || 7}
                     required
                     value={ayahEnd}
                     onChange={(e) => setAyahEnd(e.target.value)}
@@ -831,6 +936,25 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
           </div>
         );
       })()}
+
+      {/* Dynamic Slide-in Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[100] max-w-sm w-full bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl rounded-2xl p-4 flex items-start gap-3 animate-slideIn">
+          <div className={`p-2 rounded-xl text-white ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+            {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h5 className="text-xs font-bold text-slate-800 m-0 capitalize">{toast.type} Notification</h5>
+            <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
