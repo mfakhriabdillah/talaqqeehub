@@ -1,16 +1,94 @@
-# React + Vite
+# TalaqqeeHub 🌙
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Connecting Hearts to the Quran through Code.
+A modern, interactive platform for digital Talaqqi.
 
-Currently, two official plugins are available:
+**TalaqqeeHub** is a real-time Learning Management System (LMS) designed specifically to connect Quran students with certified teachers (Ustadz) globally. It digitizes the traditional Talaqqi (Quranic recitation) process by providing interactive, word-by-word evaluation tools.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Demo
 
-## React Compiler
+Live Demo: [Insert Live Website URL Here]
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Overview Video: [Insert YouTube/Loom Link Here]
 
-## Expanding the ESLint configuration
+## The Problem It Solves
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Messy Manual Notes: Traditional recitation notes are often written on paper, get lost, and are hard to track over time.
+
+Geographical Barriers: Students struggle to find the right Ustadz if they are restricted by their physical location.
+
+Lack of Progress Tracking: Without a digital history, students forget their past mistakes and struggle to evaluate their learning curve.
+
+## Key Features (The Solution)
+
+**Strict Role-Based Access (RLS):** Securely separated experiences for Students and Teachers (Ustadz).
+
+**Real-time Booking System:** Students can browse teachers, pick schedules, and define specific Surah/Ayah ranges for their recitation session.
+
+**Interactive Evaluation Board (Killer Feature):** The app dynamically fetches the exact Arabic verses from a public API based on the student's booking. Teachers can click individual Arabic words to highlight mistakes instantly and save the exact coordinates.
+
+**Real-time Notifications:** Powered by Supabase Channels, users get instantly notified of booking requests, approvals, and completed evaluations without refreshing the page.
+
+## Tech Stack & Architecture
+
+### Frontend
+- React.js (Vite)
+- Tailwind CSS (Styling & Responsive Design)
+- Lucide React (Icons)
+
+### Backend & Database (Supabase)
+- PostgreSQL with Row Level Security (RLS)
+- Supabase Auth
+- Supabase Realtime (WebSockets)
+
+### Third-Party Integration:
+Al Quran Cloud API: Fetches Uthmani Arabic text dynamically based on Surah and Ayah parameters.
+
+## Database Schema
+
+The core relational flow in PostgreSQL:
+
+`users`: Stores profile data and roles (student or teacher).
+
+`bookings`: Handles the session state (pending, confirmed, cancelled, completed) and schedule metadata (Surah number, start/end ayah).
+
+`session_notes`: Stores the Ustadz's feedback and the array of mistake coordinates (mistake_words).
+
+`notifications`: Tracks real-time alerts.
+
+
+## Getting Started
+
+To run this project locally, follow these steps:
+
+### Prerequisites
+
+- Node.js (v16 or higher)
+- A Supabase account and project.
+
+### Installation
+
+- Clone the repository:
+    ```
+    git clone [https://github.com/yourusername/talaqqeehub.git](https://github.com/yourusername/talaqqeehub.git)
+    cd talaqqeehub
+    ```
+- Install dependencies:
+    ```
+    npm install
+    ```
+- Set up Environment Variables. Create a .env file in the root directory and add your Supabase keys:
+    ```
+    VITE_SUPABASE_URL=your_supabase_project_url
+    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
+- Run the Database Migrations. Ensure you have created the users, bookings, session_notes, and notifications tables in your Supabase SQL editor with the appropriate RLS policies.
+- Start the Development Server:
+    ```
+    npm run dev
+    ```
+
+🤝 Acknowledgments
+
+Built with ❤️ to empower Quranic learning globally.
+A big thanks to the open-source community and the Al Quran Cloud API for making this possible.
