@@ -57,9 +57,7 @@ export default function AuthView({ onLogin }) {
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="p-2 bg-emerald-700/40 rounded-xl border border-emerald-600/30 shadow-md">
-            <BookOpen size={22} className="text-emerald-400" />
-          </div>
+          <img src="/logo.png" alt="TalaqqeeHub Logo" className="w-10 h-10 object-contain rounded-xl border border-emerald-600/30 bg-emerald-950 shadow-md animate-fadeIn" />
           <span className="text-lg font-black tracking-tight text-white">TalaqqeeHub</span>
         </div>
 

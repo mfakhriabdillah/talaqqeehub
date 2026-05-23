@@ -31,7 +31,7 @@ export default function TeacherLayout({ user, currentView, setView, onLogout, ch
         {/* Brand */}
         <div className="p-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🕌</span>
+            <img src="/logo.png" alt="TalaqqeeHub Logo" className="w-8 h-8 object-contain rounded-lg border border-slate-800" />
             <div>
               <h2 className="text-lg font-bold text-white tracking-tight m-0">TalaqqeeHub</h2>
               <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block leading-none">

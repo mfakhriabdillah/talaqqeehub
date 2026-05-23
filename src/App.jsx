@@ -258,7 +258,7 @@ export default function App() {
       <div className="min-h-screen bg-emerald-950 flex flex-col items-center justify-center text-white space-y-4">
         <div className="relative flex items-center justify-center">
           <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin"></div>
-          <span className="absolute text-2xl animate-pulse">🕌</span>
+          <img src="/logo.png" alt="Logo" className="absolute w-8 h-8 object-contain rounded-lg animate-pulse" />
         </div>
         <div className="text-center space-y-1.5 animate-fadeIn">
           <h2 className="text-lg font-extrabold tracking-tight text-white m-0 animate-pulse">TalaqqeeHub</h2>
