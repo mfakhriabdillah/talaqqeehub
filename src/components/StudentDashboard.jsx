@@ -374,13 +374,14 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
     }
   };
 
-  // Stats computation
-  const completedSessions = sessions.filter(s => s.studentId === user?.id && s.status === 'Completed').length || sessions.filter(s => s.status === 'Completed').length;
-  const pendingSessions = sessions.filter(s => s.studentId === user?.id && s.status === 'Pending').length || sessions.filter(s => s.status === 'Pending').length;
-  const activeGoal = "Al-Mulk Memorization";
+  // Filter student sessions dynamically (strictly matches real user ID)
+  const studentSessions = sessions.filter(s => s.studentId === user?.id);
 
-  // Filter student sessions dynamically (either match real user ID or default mock stud-1 for preview fullness)
-  const studentSessions = sessions.filter(s => s.studentId === user?.id || (s.studentId === 'stud-1' && !sessions.some(realS => realS.studentId === user?.id)));
+  // Stats computation dynamically calculated from student's fetched real sessions
+  const completedSessions = studentSessions.filter(s => s.status?.toLowerCase() === 'completed').length;
+  const pendingSessions = studentSessions.filter(s => s.status?.toLowerCase() === 'pending').length;
+  const totalQuranHours = completedSessions > 0 ? (completedSessions * 0.5).toFixed(1) : "0.0";
+  const activeGoal = "Al-Mulk Memorization";
 
   // Sub-view Renders
   const isDashboardView = subView === 'dashboard';
@@ -415,7 +416,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
               </div>
               <div>
                 <span className="text-xs text-slate-400 font-semibold block uppercase">Total Quran Hours</span>
-                <span className="text-xl font-bold text-slate-800">14.5 hrs</span>
+                <span className="text-xl font-bold text-slate-800">{totalQuranHours} hrs</span>
               </div>
             </div>
 
@@ -477,7 +478,16 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
 
                 {/* Session Card List */}
                 <div className="space-y-4">
-                  {studentSessions.map((sess) => {
+                  {studentSessions.length === 0 ? (
+                    <div className="bg-slate-50 rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400 space-y-3">
+                      <span className="text-4xl block">📖</span>
+                      <p className="text-sm font-bold text-slate-800 m-0">You don't have any recitation sessions yet.</p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Click the "Book New Session" button above to schedule your first recitation with an Ustadz.
+                      </p>
+                    </div>
+                  ) : (
+                    studentSessions.map((sess) => {
                     const ustadzObj = USTADZ_LIST.find(u => u.name === sess.ustadzName);
                     const isPending = sess.status === 'Pending';
                     const isConfirmed = sess.status === 'Confirmed';
@@ -558,7 +568,8 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                )}
                 </div>
               </div>
             </div>

@@ -20,24 +20,12 @@ export default function AuthView({ onLogin }) {
   const { signIn, signUp } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('student');
-  const [email, setEmail] = useState('ahmad@talaqqihub.com');
-  const [password, setPassword] = useState('password123');
-  const [name, setName] = useState('Ahmad Fauzi');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
-
-  const handleQuickFill = (selectedRole) => {
-    setRole(selectedRole);
-    if (selectedRole === 'student') {
-      setEmail('ahmad@talaqqihub.com');
-      setName('Ahmad Fauzi');
-    } else {
-      setEmail('ustadz.abdul@talaqqihub.com');
-      setName('Ustadz Abdul Somad, Lc., M.A.');
-    }
-    setError(null);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -138,7 +126,7 @@ export default function AuthView({ onLogin }) {
           <div className="flex bg-slate-100 p-1.5 rounded-2xl max-w-xs mx-auto border border-slate-200/50">
             <button
               type="button"
-              onClick={() => { setIsLogin(true); handleQuickFill(role); }}
+              onClick={() => { setIsLogin(true); }}
               className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-300 cursor-pointer ${
                 isLogin 
                   ? 'bg-white text-slate-800 shadow-sm border border-slate-200/25' 
@@ -183,41 +171,40 @@ export default function AuthView({ onLogin }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Demo Quick-Fill Pill Segments */}
-            <div className="space-y-2 bg-slate-50 border border-slate-100 p-4 rounded-3xl">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Login Role Mode</span>
-                <span className="text-[10px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-widest animate-pulse">
-                  Demo Preset Active
-                </span>
+            {/* Role Selection (Only visible in Register/Create Account mode) */}
+            {!isLogin && (
+              <div className="space-y-2 bg-slate-50 border border-slate-100 p-4 rounded-3xl animate-fadeIn">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Join TalaqqeeHub As</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setRole('student')}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                      role === 'student'
+                        ? 'border-emerald-600 bg-white text-emerald-700 shadow-md shadow-emerald-600/5'
+                        : 'border-slate-200 bg-white/40 text-slate-500 hover:bg-white hover:text-slate-700'
+                    }`}
+                  >
+                    <GraduationCap size={14} />
+                    Student
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole('teacher')}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                      role === 'teacher'
+                        ? 'border-emerald-600 bg-white text-emerald-700 shadow-md shadow-emerald-600/5'
+                        : 'border-slate-200 bg-white/40 text-slate-500 hover:bg-white hover:text-slate-700'
+                    }`}
+                  >
+                    <ShieldCheck size={14} />
+                    Ustadz (Teacher)
+                  </button>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('student')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
-                    role === 'student'
-                      ? 'border-emerald-600 bg-white text-emerald-700 shadow-md shadow-emerald-600/5'
-                      : 'border-slate-200 bg-white/40 text-slate-500 hover:bg-white hover:text-slate-700'
-                  }`}
-                >
-                  <GraduationCap size={14} />
-                  Student Account
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('teacher')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
-                    role === 'teacher'
-                      ? 'border-emerald-600 bg-white text-emerald-700 shadow-md shadow-emerald-600/5'
-                      : 'border-slate-200 bg-white/40 text-slate-500 hover:bg-white hover:text-slate-700'
-                  }`}
-                >
-                  <ShieldCheck size={14} />
-                  Ustadz Account
-                </button>
-              </div>
-            </div>
+            )}
 
             {/* Name Input (Visible in Create Account mode) */}
             {!isLogin && (

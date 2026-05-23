@@ -73,7 +73,7 @@ const mapDbBookingToSession = (booking, userRole, profilesMap = {}) => {
 export default function App() {
   const { user, profile, loading, signOut } = useAuth();
   const [currentView, setView] = useState('dashboard');
-  const [sessions, setSessions] = useState(DEFAULT_SESSIONS);
+  const [sessions, setSessions] = useState([]);
   const [activeSessionForEval, setActiveSessionForEval] = useState(null);
 
   // Supabase real bookings state

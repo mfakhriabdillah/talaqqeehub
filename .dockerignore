@@ -13,6 +13,6 @@ eslint.config.js
 init_instruction.md
 Dockerfile
 .dockerignore
-nginx.conf.template
+
 README_DEPLOY.md
 README.md
