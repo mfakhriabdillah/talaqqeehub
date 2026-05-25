@@ -36,9 +36,11 @@ const SuraAyahsMap = {
 export default function StudentDashboard({ sessions, onAddSession, subView = 'dashboard', setView }) {
   const { user, profile } = useAuth();
   
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  
   // Booking Form State
   const [ustadzId, setUstadzId] = useState('');
-  const [date, setDate] = useState('2026-05-20');
+  const [date, setDate] = useState(todayDateStr);
   const [time, setTime] = useState('10:00');
   const [surahNumber, setSurahNumber] = useState(1);
   const [ayahStart, setAyahStart] = useState('1');
@@ -666,6 +668,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                   <input
                     type="date"
                     required
+                    min={todayDateStr}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
@@ -676,6 +679,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                   <input
                     type="time"
                     required
+                    step="900"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
@@ -708,6 +712,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                     type="number"
                     min="1"
                     max={surahAyahCounts[surahNumber] || 7}
+                    placeholder="Min: 1"
                     required
                     value={ayahStart}
                     onChange={(e) => setAyahStart(e.target.value)}
@@ -720,6 +725,7 @@ export default function StudentDashboard({ sessions, onAddSession, subView = 'da
                     type="number"
                     min="1"
                     max={surahAyahCounts[surahNumber] || 7}
+                    placeholder={`Max: ${surahAyahCounts[surahNumber] || 7}`}
                     required
                     value={ayahEnd}
                     onChange={(e) => setAyahEnd(e.target.value)}
